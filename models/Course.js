@@ -16,7 +16,8 @@ const courseSchema = new mongoose.Schema(
       enum: ['YouTube', 'Udemy', 'Coursera', 'edX', 'Pluralsight', 'LinkedIn', 'Other'],
       default: 'YouTube',
     },
-    url: { type: String, required: true },
+    courseUrl: { type: String, default: '' },
+    url: { type: String, default: '' }, // legacy alias
     price: { type: Number, default: 0 }, // 0 = مجاني
     category: { type: String, default: '' },
     tags: [{ type: String }],
@@ -35,6 +36,14 @@ const courseSchema = new mongoose.Schema(
     rating: { type: Number, min: 0, max: 5, default: 0 },
     isActive: { type: Boolean, default: true },
     order: { type: Number, default: 0 },
+    // فيديوهات الكورس (للكورسات اللي عندها playlist داخلية)
+    videos: [{
+      title: { type: String, required: true },
+      youtubeId: { type: String, default: '' },
+      youtubeUrl: { type: String, default: '' },
+      duration: { type: String, default: '' },
+      order: { type: Number, default: 0 },
+    }],
     // الطلاب المسجلين
     enrolledUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   },

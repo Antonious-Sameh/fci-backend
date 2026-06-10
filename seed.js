@@ -15,8 +15,8 @@ const connectDB = require('./config/db');
 // ══════════════════════════════════════════════════════════════════
 
 // بيانات الأدمن — احفظها في .env أو هتستخدم القيم الافتراضية
-const ADMIN_EMAIL    = process.env.SEED_ADMIN_EMAIL    || 'admin@fci.edu';
-const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || 'admin123456';
+const ADMIN_EMAIL    = process.env.SEED_ADMIN_EMAIL    || 'Antonious@gmail.com';
+const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || '123456789';
 const STUDENT_EMAIL    = process.env.SEED_STUDENT_EMAIL    || 'student@fci.edu';
 const STUDENT_PASSWORD = process.env.SEED_STUDENT_PASSWORD || 'student123';
 
@@ -49,7 +49,7 @@ const seed = async () => {
     year: 1,
     isActive: true,
   });
-  console.log('👤 Users created  →  admin@fci.edu / admin123456');
+  console.log('👤 Users created  →  Antonious@gmail.com / 123456789');
 
   // ── Subjects ──────────────────────────────────────────────────
   await Subject.insertMany([

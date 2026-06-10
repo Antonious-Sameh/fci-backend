@@ -43,6 +43,7 @@ const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:4173',
   'http://127.0.0.1:5173',
+  'https://roadtocareer.vercel.app',
 ];
 
 if (process.env.CLIENT_URL) allowedOrigins.push(process.env.CLIENT_URL);
@@ -57,6 +58,8 @@ app.use(
           (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:'))) {
         return callback(null, true);
       }
+      // قبول preview deployments من Vercel
+      if (origin.includes('.vercel.app')) return callback(null, true);
       callback(new Error('CORS blocked: ' + origin));
     },
     credentials: true,
