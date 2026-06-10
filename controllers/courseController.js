@@ -1,7 +1,34 @@
 const Course = require('../models/Course');
 const User = require('../models/User');
 
-// GET /api/courses
+// ── helper ────────────────────────────────────────────────────────
+const extractYoutubeId = (url) => {
+  if (!url) return '';
+  const m = url.match(/(?:v=|youtu\.be\/|embed\/)([^&\n?#]+)/);
+  return m?.[1] || '';
+};
+
+const sanitizeCoursePayload = (body) => {
+  const {
+    title, description, instructor, platform, category,
+    level, language, price, thumbnail, thumbnailUrl,
+    courseUrl, url, tags, isActive, order, duration,
+  } = body;
+  const finalUrl = courseUrl || url || '';
+  return {
+    title, description, instructor, platform, category,
+    level, language,
+    price: price !== undefined ? Number(price) : undefined,
+    thumbnail: thumbnail || thumbnailUrl,
+    courseUrl: finalUrl,
+    url: finalUrl,
+    tags, isActive,
+    order: order !== undefined ? Number(order) : undefined,
+    duration,
+  };
+};
+
+// ── Student endpoints ─────────────────────────────────────────────
 const getCourses = async (req, res) => {
   try {
     const { category, platform, level, language, search } = req.query;
@@ -16,26 +43,29 @@ const getCourses = async (req, res) => {
         { 'title.en': { $regex: search, $options: 'i' } },
       ];
     }
-    const courses = await Course.find(filter).select('-enrolledUsers').sort({ order: 1, createdAt: -1 });
+    const courses = await Course.find(filter)
+      .select('-enrolledUsers')
+      .sort({ order: 1, createdAt: -1 });
     res.json({ success: true, count: courses.length, courses });
-  } catch (error) {
+  } catch {
     res.status(500).json({ success: false, message: 'خطأ في السيرفر' });
   }
 };
 
-// GET /api/courses/:id
 const getCourse = async (req, res) => {
   try {
     const course = await Course.findById(req.params.id);
     if (!course) return res.status(404).json({ success: false, message: 'الكورس غير موجود' });
     const isEnrolled = course.enrolledUsers.includes(req.user._id);
-    res.json({ success: true, course, isEnrolled });
-  } catch (error) {
+    // ترتيب الفيديوهات
+    const sortedCourse = course.toObject();
+    sortedCourse.videos = [...(sortedCourse.videos || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
+    res.json({ success: true, course: sortedCourse, isEnrolled });
+  } catch {
     res.status(500).json({ success: false, message: 'خطأ في السيرفر' });
   }
 };
 
-// POST /api/courses/:id/enroll
 const enrollCourse = async (req, res) => {
   try {
     const course = await Course.findById(req.params.id);
@@ -46,12 +76,11 @@ const enrollCourse = async (req, res) => {
     await course.save();
     await User.findByIdAndUpdate(req.user._id, { $addToSet: { enrolledCourses: course._id } });
     res.json({ success: true, message: 'تم الاشتراك في الكورس' });
-  } catch (error) {
+  } catch {
     res.status(500).json({ success: false, message: 'خطأ في السيرفر' });
   }
 };
 
-// GET /api/courses/my
 const getMyCourses = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).populate({
@@ -60,35 +89,12 @@ const getMyCourses = async (req, res) => {
       select: '-enrolledUsers',
     });
     res.json({ success: true, courses: user.enrolledCourses });
-  } catch (error) {
+  } catch {
     res.status(500).json({ success: false, message: 'خطأ في السيرفر' });
   }
 };
 
-// ── helper: نقي الحقول المسموح بها وصحح url/courseUrl ─────────────
-const sanitizeCoursePayload = (body) => {
-  const {
-    title, description, instructor, platform, category,
-    level, language, price, thumbnail, thumbnailUrl,
-    courseUrl, url, tags, isActive, order, duration, videos,
-  } = body;
-
-  // نقبل courseUrl أو url (تلاتة) ونوحّدهم
-  const finalUrl = courseUrl || url || '';
-
-  return {
-    title, description, instructor, platform, category,
-    level, language,
-    price: price !== undefined ? Number(price) : undefined,
-    thumbnail: thumbnail || thumbnailUrl,
-    courseUrl: finalUrl,
-    url: finalUrl,        // نحفظ الاتنين للتوافق
-    tags, isActive, order: order !== undefined ? Number(order) : undefined,
-    duration, videos,
-  };
-};
-
-// POST /api/courses  (admin)
+// ── Admin CRUD ────────────────────────────────────────────────────
 const createCourse = async (req, res) => {
   try {
     const data = sanitizeCoursePayload(req.body);
@@ -103,47 +109,88 @@ const createCourse = async (req, res) => {
   }
 };
 
-// PUT /api/courses/:id  (admin)
 const updateCourse = async (req, res) => {
   try {
     const data = sanitizeCoursePayload(req.body);
     const course = await Course.findByIdAndUpdate(req.params.id, data, { new: true, runValidators: true });
     if (!course) return res.status(404).json({ success: false, message: 'الكورس غير موجود' });
     res.json({ success: true, course });
-  } catch (error) {
+  } catch {
     res.status(500).json({ success: false, message: 'خطأ في السيرفر' });
   }
 };
 
-// DELETE /api/courses/:id  (admin)
 const deleteCourse = async (req, res) => {
   try {
     const course = await Course.findByIdAndDelete(req.params.id);
     if (!course) return res.status(404).json({ success: false, message: 'الكورس غير موجود' });
     res.json({ success: true, message: 'تم الحذف' });
-  } catch (error) {
+  } catch {
     res.status(500).json({ success: false, message: 'خطأ في السيرفر' });
   }
 };
 
-// ── Course Videos (Admin) ─────────────────────────────────────────
+// ── Video Management ──────────────────────────────────────────────
 // POST /api/courses/:id/videos
 const addVideo = async (req, res) => {
   try {
-    const { title, youtubeUrl, duration, order } = req.body;
-    if (!title) return res.status(400).json({ success: false, message: 'عنوان الفيديو مطلوب' });
+    const { title, description, youtubeUrl, duration, order } = req.body;
+    if (!title?.trim()) return res.status(400).json({ success: false, message: 'عنوان الفيديو مطلوب' });
+    if (!youtubeUrl?.trim()) return res.status(400).json({ success: false, message: 'رابط اليوتيوب مطلوب' });
 
-    // استخراج YouTube ID من الرابط
-    const ytMatch = youtubeUrl?.match(/(?:v=|youtu\.be\/|embed\/)([^&\n?#]+)/);
-    const youtubeId = ytMatch?.[1] || '';
+    const youtubeId = extractYoutubeId(youtubeUrl);
+    if (!youtubeId) return res.status(400).json({ success: false, message: 'رابط يوتيوب غير صالح' });
 
     const course = await Course.findByIdAndUpdate(
       req.params.id,
-      { $push: { videos: { title, youtubeUrl: youtubeUrl || '', youtubeId, duration: duration || '', order: Number(order) || 0 } } },
+      {
+        $push: {
+          videos: {
+            title: title.trim(),
+            description: description?.trim() || '',
+            youtubeUrl: youtubeUrl.trim(),
+            youtubeId,
+            duration: duration?.trim() || '',
+            order: Number(order) || 0,
+          },
+        },
+      },
       { new: true }
     );
     if (!course) return res.status(404).json({ success: false, message: 'الكورس غير موجود' });
-    res.json({ success: true, videos: course.videos });
+
+    const sorted = [...course.videos].sort((a, b) => (a.order || 0) - (b.order || 0));
+    res.json({ success: true, videos: sorted });
+  } catch (error) {
+    console.error('addVideo error:', error);
+    res.status(500).json({ success: false, message: 'خطأ في السيرفر' });
+  }
+};
+
+// PUT /api/courses/:id/videos/:videoId
+const updateVideo = async (req, res) => {
+  try {
+    const { title, description, youtubeUrl, duration, order } = req.body;
+    const course = await Course.findById(req.params.id);
+    if (!course) return res.status(404).json({ success: false, message: 'الكورس غير موجود' });
+
+    const video = course.videos.id(req.params.videoId);
+    if (!video) return res.status(404).json({ success: false, message: 'الفيديو غير موجود' });
+
+    if (title !== undefined) video.title = title.trim();
+    if (description !== undefined) video.description = description.trim();
+    if (youtubeUrl !== undefined) {
+      const youtubeId = extractYoutubeId(youtubeUrl);
+      if (!youtubeId) return res.status(400).json({ success: false, message: 'رابط يوتيوب غير صالح' });
+      video.youtubeUrl = youtubeUrl.trim();
+      video.youtubeId = youtubeId;
+    }
+    if (duration !== undefined) video.duration = duration.trim();
+    if (order !== undefined) video.order = Number(order);
+
+    await course.save();
+    const sorted = [...course.videos].sort((a, b) => (a.order || 0) - (b.order || 0));
+    res.json({ success: true, videos: sorted });
   } catch (error) {
     res.status(500).json({ success: false, message: 'خطأ في السيرفر' });
   }
@@ -158,10 +205,15 @@ const deleteVideo = async (req, res) => {
       { new: true }
     );
     if (!course) return res.status(404).json({ success: false, message: 'الكورس غير موجود' });
-    res.json({ success: true, videos: course.videos });
-  } catch (error) {
+    const sorted = [...course.videos].sort((a, b) => (a.order || 0) - (b.order || 0));
+    res.json({ success: true, videos: sorted });
+  } catch {
     res.status(500).json({ success: false, message: 'خطأ في السيرفر' });
   }
 };
 
-module.exports = { getCourses, getCourse, enrollCourse, getMyCourses, createCourse, updateCourse, deleteCourse, addVideo, deleteVideo };
+module.exports = {
+  getCourses, getCourse, enrollCourse, getMyCourses,
+  createCourse, updateCourse, deleteCourse,
+  addVideo, updateVideo, deleteVideo,
+};

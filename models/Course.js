@@ -39,6 +39,7 @@ const courseSchema = new mongoose.Schema(
     // فيديوهات الكورس (للكورسات اللي عندها playlist داخلية)
     videos: [{
       title: { type: String, required: true },
+      description: { type: String, default: '' },
       youtubeId: { type: String, default: '' },
       youtubeUrl: { type: String, default: '' },
       duration: { type: String, default: '' },
