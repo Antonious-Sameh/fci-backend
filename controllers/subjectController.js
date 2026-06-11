@@ -1,5 +1,16 @@
 const Subject = require('../models/Subject');
 
+
+// ── helper: استخراج YouTube ID من رابط أو ID مباشر ────────────────
+const extractYoutubeId = (input) => {
+  if (!input) return '';
+  input = input.trim();
+  // لو هو ID مباشر (بدون http)
+  if (!input.includes('/') && !input.includes('?')) return input;
+  // لو رابط كامل
+  const m = input.match(/(?:v=|youtu\.be\/|embed\/)([^&?#\n]+)/);
+  return m ? m[1] : input;
+};
 // ─────────────────────────────────────────────────────────────────
 // @desc    جلب كل مواد سنة + ترم معين
 // @route   GET /api/subjects?year=1&term=1
@@ -192,7 +203,7 @@ const addLecture = async (req, res) => {
       title: { ar: titleAr, en: titleEn || '' },
       type: type || 'lecture',
       videoUrl: videoUrl || '',
-      videoId: videoId || '',
+      videoId: extractYoutubeId(videoId || videoUrl || ''),
       duration: duration || '',
       order: order !== undefined ? order : subject.lectures.length,
     };
@@ -238,7 +249,7 @@ const updateLecture = async (req, res) => {
     if (titleEn !== undefined) lecture.title.en = titleEn;
     if (type) lecture.type = type;
     if (videoUrl !== undefined) lecture.videoUrl = videoUrl;
-    if (videoId !== undefined) lecture.videoId = videoId;
+    if (videoId !== undefined) lecture.videoId = extractYoutubeId(videoId || videoUrl || '');
     if (duration !== undefined) lecture.duration = duration;
     if (order !== undefined) lecture.order = order;
     if (isVisible !== undefined) lecture.isVisible = isVisible;
